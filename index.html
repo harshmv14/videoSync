@@ -1772,6 +1772,16 @@
     let activePeersList = [];         // List of peers in room
     let remoteStreamAttached = false;
 
+    // Live stream co-watch time sync variables
+    let remoteStreamTime = 0;
+    let remoteStreamDuration = 0;
+    let remoteStreamIsPlaying = false;
+    let lastSentStreamTime = 0;
+    let lastStreamTimeUpdateLocalTime = 0;
+    let lastStreamTimeUpdateVal = 0;
+    let hostAudioContext = null;
+    let hostAudioSourceNode = null;
+
     function applySubtitleSettings() {
       // 1. Update font size
       const cueStyle = document.getElementById('custom-cue-style');
@@ -2148,6 +2158,16 @@
       if (syncInterval) {
         clearInterval(syncInterval);
         syncInterval = null;
+      }
+      
+      // Cleanup host Audio loopback
+      if (hostAudioSourceNode) {
+        try { hostAudioSourceNode.disconnect(); } catch(e){}
+        hostAudioSourceNode = null;
+      }
+      if (hostAudioContext) {
+        try { hostAudioContext.close(); } catch(e){}
+        hostAudioContext = null;
       }
       
       // Abort active subtitle streams
@@ -2712,9 +2732,34 @@
 
     // Time progress trackers
     video.addEventListener('timeupdate', () => {
+      if (video.srcObject) {
+        // Client mode: calculate interpolated playback time from stream connection time
+        if (remoteStreamIsPlaying) {
+          remoteStreamTime = lastStreamTimeUpdateVal + (video.currentTime - lastStreamTimeUpdateLocalTime);
+        } else {
+          remoteStreamTime = lastStreamTimeUpdateVal;
+        }
+        updateTimeDisplay();
+        updateProgressBar();
+        return;
+      }
+
       if (!video.seeking) {
         updateTimeDisplay();
         updateProgressBar();
+      }
+      
+      // Host broadcasts stream time updates to peers
+      if (isHost && isStreamingPlayback && roomId) {
+        if (Math.abs(video.currentTime - lastSentStreamTime) > 0.8) {
+          broadcastSync({
+            type: 'stream-time',
+            time: video.currentTime,
+            duration: video.duration,
+            isPlaying: !video.paused
+          });
+          lastSentStreamTime = video.currentTime;
+        }
       }
       
       // Save watched history state occasionally
@@ -2724,24 +2769,49 @@
     });
 
     function updateTimeDisplay() {
-      const cur = formatTime(activePlayer.getCurrentTime());
-      const dur = formatTime(activePlayer.getDuration() || 0);
-      timeDisplay.textContent = `${cur} / ${dur}`;
+      let cur = 0;
+      let dur = 0;
+      
+      if (video.srcObject) {
+        cur = remoteStreamTime;
+        dur = remoteStreamDuration;
+      } else {
+        cur = activePlayer.getCurrentTime();
+        dur = activePlayer.getDuration();
+      }
+      
+      timeDisplay.textContent = `${formatTime(cur)} / ${formatTime(dur)}`;
     }
 
     function updateProgressBar() {
-      const ratio = activePlayer.getCurrentTime() / (activePlayer.getDuration() || 1);
+      let cur = 0;
+      let dur = 1;
+      
+      if (video.srcObject) {
+        cur = remoteStreamTime;
+        dur = remoteStreamDuration || 1;
+      } else {
+        cur = activePlayer.getCurrentTime();
+        dur = activePlayer.getDuration() || 1;
+      }
+      
+      const ratio = cur / dur;
       timelineProgress.style.width = `${ratio * 100}%`;
       timelineThumb.style.left = `${ratio * 100}%`;
       
       // Update buffer ratio
-      if (!isYouTubeMode && video.buffered.length > 0) {
-        const bufferEnd = video.buffered.end(video.buffered.length - 1);
-        const bufRatio = bufferEnd / (video.duration || 1);
-        timelineBuffer.style.width = `${bufRatio * 100}%`;
-      } else if (isYouTubeMode && ytPlayer && ytPlayer.getVideoLoadedFraction) {
-        const fraction = ytPlayer.getVideoLoadedFraction();
-        timelineBuffer.style.width = `${fraction * 100}%`;
+      if (!video.srcObject) {
+        if (!isYouTubeMode && video.buffered.length > 0) {
+          const bufferEnd = video.buffered.end(video.buffered.length - 1);
+          const bufRatio = bufferEnd / (video.duration || 1);
+          timelineBuffer.style.width = `${bufRatio * 100}%`;
+        } else if (isYouTubeMode && ytPlayer && ytPlayer.getVideoLoadedFraction) {
+          const fraction = ytPlayer.getVideoLoadedFraction();
+          timelineBuffer.style.width = `${fraction * 100}%`;
+        }
+      } else {
+        // Stream receivers get buffer at 100% since it's a real-time stream
+        timelineBuffer.style.width = '100%';
       }
     }
 
@@ -3966,23 +4036,51 @@
           
         case 'play':
           ignoreSyncEvents = true;
-          activePlayer.seek(data.time);
-          activePlayer.play();
+          if (video.srcObject) {
+            remoteStreamTime = data.time;
+            remoteStreamIsPlaying = true;
+            lastStreamTimeUpdateLocalTime = video.currentTime;
+            lastStreamTimeUpdateVal = data.time;
+            updateTimeDisplay();
+            updateProgressBar();
+            video.play().catch(e => console.log("Live stream play failed on sync:", e));
+          } else {
+            activePlayer.seek(data.time);
+            activePlayer.play();
+          }
           showHUD('play', 'Play synced');
           setTimeout(() => ignoreSyncEvents = false, 300);
           break;
           
         case 'pause':
           ignoreSyncEvents = true;
-          activePlayer.seek(data.time);
-          activePlayer.pause();
+          if (video.srcObject) {
+            remoteStreamTime = data.time;
+            remoteStreamIsPlaying = false;
+            lastStreamTimeUpdateLocalTime = video.currentTime;
+            lastStreamTimeUpdateVal = data.time;
+            updateTimeDisplay();
+            updateProgressBar();
+            video.pause();
+          } else {
+            activePlayer.seek(data.time);
+            activePlayer.pause();
+          }
           showHUD('pause', 'Pause synced');
           setTimeout(() => ignoreSyncEvents = false, 300);
           break;
           
         case 'seek':
           ignoreSyncEvents = true;
-          activePlayer.seek(data.time);
+          if (video.srcObject) {
+            remoteStreamTime = data.time;
+            lastStreamTimeUpdateLocalTime = video.currentTime;
+            lastStreamTimeUpdateVal = data.time;
+            updateTimeDisplay();
+            updateProgressBar();
+          } else {
+            activePlayer.seek(data.time);
+          }
           showHUD('chevrons-right', 'Seek synced');
           setTimeout(() => ignoreSyncEvents = false, 300);
           break;
@@ -3992,6 +4090,16 @@
           activePlayer.setPlaybackRate(data.rate);
           showHUD('gauge', `Speed: ${data.rate}x`);
           setTimeout(() => ignoreSyncEvents = false, 300);
+          break;
+
+        case 'stream-time':
+          remoteStreamTime = data.time;
+          remoteStreamDuration = data.duration;
+          remoteStreamIsPlaying = data.isPlaying;
+          lastStreamTimeUpdateLocalTime = video.currentTime;
+          lastStreamTimeUpdateVal = data.time;
+          updateTimeDisplay();
+          updateProgressBar();
           break;
           
         case 'youtube-load':
@@ -4060,10 +4168,22 @@
       
       setTimeout(() => {
         ignoreSyncEvents = true;
-        activePlayer.seek(data.currentTime);
-        activePlayer.setPlaybackRate(data.playbackRate);
-        if (data.isPlaying) activePlayer.play();
-        else activePlayer.pause();
+        if (video.srcObject) {
+          remoteStreamTime = data.currentTime;
+          remoteStreamDuration = 0;
+          remoteStreamIsPlaying = data.isPlaying;
+          lastStreamTimeUpdateLocalTime = video.currentTime;
+          lastStreamTimeUpdateVal = data.currentTime;
+          updateTimeDisplay();
+          updateProgressBar();
+          if (data.isPlaying) video.play().catch(e => console.log(e));
+          else video.pause();
+        } else {
+          activePlayer.seek(data.currentTime);
+          activePlayer.setPlaybackRate(data.playbackRate);
+          if (data.isPlaying) activePlayer.play();
+          else activePlayer.pause();
+        }
         setTimeout(() => ignoreSyncEvents = false, 300);
       }, 800);
     }
@@ -4130,6 +4250,10 @@
         }, 500);
 
         call.on('stream', (stream) => {
+          if (video.srcObject && video.srcObject.id === stream.id) {
+            console.log("Stream already assigned, ignoring duplicate event.");
+            return;
+          }
           const videoTracks = stream.getVideoTracks();
           const audioTracks = stream.getAudioTracks();
           appendSystemMessage(`[Stream Info] Received stream: ${videoTracks.length} video, ${audioTracks.length} audio tracks.`);
@@ -4180,6 +4304,14 @@
     }
 
     function addWebcamFeed(peerId, stream) {
+      const existingCard = document.getElementById('webcam-' + peerId);
+      if (existingCard) {
+        const videoEl = existingCard.querySelector('video');
+        if (videoEl && videoEl.srcObject && videoEl.srcObject.id === stream.id) {
+          // Stream already assigned, do not recreate card to avoid flickering
+          return;
+        }
+      }
       removeWebcamFeed(peerId);
       
       const card = document.createElement('div');
@@ -4295,6 +4427,26 @@
           const audioTracks = hostPlaybackStream.getAudioTracks();
           appendSystemMessage(`[Stream Info] Captured stream: ${videoTracks.length} video, ${audioTracks.length} audio tracks.`);
 
+          // Web Audio API Loopback to prevent Chrome muting local speaker output
+          if (audioTracks.length > 0) {
+            try {
+              if (!hostAudioContext) {
+                hostAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+              }
+              if (hostAudioContext.state === 'suspended') {
+                hostAudioContext.resume();
+              }
+              if (hostAudioSourceNode) {
+                try { hostAudioSourceNode.disconnect(); } catch(e){}
+              }
+              hostAudioSourceNode = hostAudioContext.createMediaStreamSource(hostPlaybackStream);
+              hostAudioSourceNode.connect(hostAudioContext.destination);
+              console.log("Host Audio loopback connected successfully to prevent muting.");
+            } catch (audioErr) {
+              console.warn("Failed to initiate host Web Audio loopback:", audioErr);
+            }
+          }
+
           Object.keys(peerConnections).forEach(peerId => {
             const call = peer.call(peerId, hostPlaybackStream, {
               metadata: { type: 'video-stream' }
@@ -4333,6 +4485,17 @@
           hostPlaybackStream.getTracks().forEach(t => t.stop());
           hostPlaybackStream = null;
         }
+        
+        // Clean up host Audio loopback
+        if (hostAudioSourceNode) {
+          try { hostAudioSourceNode.disconnect(); } catch(e){}
+          hostAudioSourceNode = null;
+        }
+        if (hostAudioContext) {
+          try { hostAudioContext.close(); } catch(e){}
+          hostAudioContext = null;
+        }
+
         broadcastSync({
           type: 'local-stream-stop'
         });

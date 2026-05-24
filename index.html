@@ -1334,6 +1334,54 @@
     ::-webkit-scrollbar-thumb:hover {
       background: rgba(255, 255, 255, 0.25);
     }
+
+    /* Mobile responsiveness styles */
+    @media (max-width: 768px) {
+      #sidebar {
+        position: absolute !important;
+        left: 0;
+        top: 0;
+        height: 100%;
+        box-shadow: 5px 0 25px rgba(0, 0, 0, 0.5);
+      }
+      #right-sidebar {
+        position: absolute !important;
+        right: 0;
+        top: 0;
+        height: 100%;
+        box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
+      }
+      #sidebar.collapsed {
+        transform: translateX(-340px) !important;
+      }
+      #right-sidebar.collapsed {
+        transform: translateX(340px) !important;
+      }
+      .controls-row {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+      }
+      .controls-group {
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .shortcuts-guide {
+        display: none !important;
+      }
+      .empty-state-title {
+        font-size: 22px;
+      }
+      .empty-state-desc {
+        font-size: 12px;
+        padding: 0 16px;
+      }
+      .drop-zone {
+        padding: 20px;
+        max-width: 90%;
+      }
+    }
   </style>
   <style id="custom-cue-style">
     /* Dynamic subtitle cues styles will be loaded here */
@@ -2307,6 +2355,10 @@
           parser.write(value);
           await new Promise(r => setTimeout(r, 0));
         }
+        console.log("MKV subtitle extraction completed.");
+        if (isHost && isStreamingPlayback) {
+          syncSubtitleCuesToPeers();
+        }
       } catch (err) {
         console.log("MKV stream reading completed or cancelled.");
       }
@@ -2392,6 +2444,10 @@
           mp4boxFile.appendBuffer(buffer);
           await new Promise(r => setTimeout(r, 0));
         }
+        console.log("MP4 subtitle extraction completed.");
+        if (isHost && isStreamingPlayback) {
+          syncSubtitleCuesToPeers();
+        }
       } catch (err) {
         console.log("MP4 stream reading completed or cancelled.");
       }
@@ -2446,6 +2502,10 @@
         
         populateSubtitleMenu();
         showHUD('subtitles', 'Loaded External Subtitles');
+        
+        if (isHost && isStreamingPlayback) {
+          syncSubtitleCuesToPeers();
+        }
       };
       reader.readAsText(file);
     }
@@ -2962,6 +3022,14 @@
         populateSubtitleMenu();
         showHUD('subtitles', 'Subtitles Off');
         subtitleDropdown.classList.remove('show');
+        
+        if (isHost && isStreamingPlayback) {
+          broadcastSync({
+            type: 'subtitle-cues',
+            cues: [],
+            label: 'off'
+          });
+        }
       });
       subtitlesTracksList.appendChild(offBtn);
       
@@ -3032,6 +3100,10 @@
             populateSubtitleMenu();
             showHUD('subtitles', label.split(' ')[0]);
             subtitleDropdown.classList.remove('show');
+            
+            if (isHost && isStreamingPlayback) {
+              syncSubtitleCuesToPeers();
+            }
           });
           subtitlesTracksList.appendChild(btn);
         });
@@ -3555,7 +3627,7 @@
       updatePlayBtn(true);
       resetControlsTimeout();
       
-      if (!ignoreSyncEvents) {
+      if (!ignoreSyncEvents && !video.srcObject) {
         broadcastSync({
           type: 'play',
           time: video.currentTime
@@ -3569,7 +3641,7 @@
       document.body.style.cursor = 'default';
       if (controlsTimeout) clearTimeout(controlsTimeout);
       
-      if (!ignoreSyncEvents) {
+      if (!ignoreSyncEvents && !video.srcObject) {
         broadcastSync({
           type: 'pause',
           time: video.currentTime
@@ -3578,7 +3650,7 @@
     });
 
     video.addEventListener('seeked', () => {
-      if (!ignoreSyncEvents) {
+      if (!ignoreSyncEvents && !video.srcObject) {
         broadcastSync({
           type: 'seek',
           time: video.currentTime
@@ -4213,12 +4285,14 @@
               }
               parameters.encodings.forEach(encoding => {
                 if (isVideoStream) {
-                  // Video sharing: target 1.2 Mbps, limit to 24fps
-                  encoding.maxBitrate = 1200000;
+                  // Video sharing: target 900 Kbps to prevent bufferbloat delay, limit to 24fps
+                  encoding.maxBitrate = 900000;
                   encoding.maxFramerate = 24;
                   const settings = sender.track.getSettings();
                   if (settings.width && settings.width > 1280) {
-                    encoding.scaleResolutionDownBy = 1.5; // Scale down 1080p -> 720p
+                    encoding.scaleResolutionDownBy = 2.0; // Scale down 1080p+ to 540p (faster/lighter)
+                  } else if (settings.width && settings.width > 800) {
+                    encoding.scaleResolutionDownBy = 1.5; // Scale down 720p -> 480p
                   } else {
                     encoding.scaleResolutionDownBy = 1.0;
                   }
@@ -4662,10 +4736,30 @@
     }
 
     function applyStreamedCues(cues, label) {
+      let track = null;
       for (let i = 0; i < video.textTracks.length; i++) {
-        video.textTracks[i].mode = 'disabled';
+        const t = video.textTracks[i];
+        if (t.label === "Streamed Subtitles" || t.label.startsWith("Streamed: ") || t.language === "streamed-lang") {
+          t.mode = 'disabled';
+          if (t.cues) {
+            for (let j = t.cues.length - 1; j >= 0; j--) {
+              try { t.removeCue(t.cues[j]); } catch(e){}
+            }
+          }
+          track = t;
+        } else {
+          t.mode = 'disabled';
+        }
       }
-      const track = video.addTextTrack("subtitles", label || "Streamed Subtitles", "en");
+      
+      if (label === 'off') {
+        currentSubtitleTrackId = 'off';
+        return;
+      }
+      
+      if (!track) {
+        track = video.addTextTrack("subtitles", "Streamed Subtitles", "streamed-lang");
+      }
       track.mode = "showing";
       cues.forEach(c => {
         try {

@@ -52,6 +52,7 @@
       font-family: var(--font-family);
       overflow: hidden;
       height: 100vh;
+      height: 100dvh;
       width: 100vw;
     }
 
@@ -1335,6 +1336,26 @@
       background: rgba(255, 255, 255, 0.25);
     }
 
+    /* Toggle Switch Styling */
+    .switch-container input:checked + .switch-slider {
+      background: var(--accent-gradient);
+      box-shadow: var(--accent-glow);
+    }
+    .switch-slider:before {
+      position: absolute;
+      content: "";
+      height: 14px;
+      width: 14px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: .3s;
+    }
+    .switch-container input:checked + .switch-slider:before {
+      transform: translateX(14px);
+    }
+
     /* Mobile responsiveness styles */
     @media (max-width: 768px) {
       #sidebar {
@@ -1356,6 +1377,24 @@
       }
       #right-sidebar.collapsed {
         transform: translateX(340px) !important;
+      }
+      #controls-overlay {
+        padding: 20px 12px 10px 12px !important;
+        gap: 6px !important;
+      }
+      .timeline-container {
+        height: 10px !important;
+      }
+      .control-btn {
+        width: 32px !important;
+        height: 32px !important;
+      }
+      .control-btn-play {
+        width: 36px !important;
+        height: 36px !important;
+      }
+      .time-display {
+        font-size: 11px !important;
       }
       .controls-row {
         flex-wrap: wrap;
@@ -1527,6 +1566,11 @@
           <button class="meet-banner-close" id="close-meet-banner">
             <i data-lucide="x" style="width: 14px; height: 14px;"></i>
           </button>
+        </div>
+
+        <!-- Floating overlay webcam panel for fullscreen mode -->
+        <div id="fullscreen-overlay-panel" style="display: none; position: absolute; right: 16px; top: 16px; bottom: 80px; width: 140px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 12px; z-index: 22; flex-direction: column; gap: 12px; overflow-y: auto;">
+          <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px;">Call</div>
         </div>
 
         <!-- HTML5 Video Element -->
@@ -1712,6 +1756,18 @@
                 <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
               </button>
             </div>
+            
+            <!-- Host Playback Control Permission Toggle -->
+            <div id="host-settings-panel" style="display: none; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; margin-top: 4px; width: 100%;">
+              <span style="font-size: 12px; font-weight: 500; color: #a78bfa; display: flex; align-items: center; gap: 6px;">
+                <i data-lucide="settings" style="width: 12px; height: 12px;"></i>
+                Allow Guest Control
+              </span>
+              <label class="switch-container" style="position: relative; display: inline-block; width: 34px; height: 20px;">
+                <input type="checkbox" id="guest-control-toggle" style="opacity: 0; width: 0; height: 0;">
+                <span class="switch-slider" style="position: absolute; cursor: pointer; inset: 0; background-color: rgba(255,255,255,0.15); border-radius: 20px; transition: .3s;"></span>
+              </label>
+            </div>
             <button id="leave-room-btn" style="width: 100%; justify-content: center; padding: 8px 12px; font-size: 12px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.25); color: #f87171; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-family: var(--font-family); font-weight: 600; transition: all 0.2s ease;">
               <i data-lucide="log-out" style="width: 14px; height: 14px;"></i>
               Leave Room
@@ -1832,12 +1888,14 @@
     let playbackCanvasInterval = null;
 
     function applySubtitleSettings() {
-      // 1. Update font size
+      // 1. Update font size (scale to 75% on mobile to fit the viewport)
+      const isMobile = window.innerWidth <= 768;
+      const size = isMobile ? Math.max(12, Math.round(subtitleSize * 0.75)) : subtitleSize;
       const cueStyle = document.getElementById('custom-cue-style');
       if (cueStyle) {
         cueStyle.innerHTML = `
           video::cue {
-            font-size: ${subtitleSize}px !important;
+            font-size: ${size}px !important;
             line-height: 1.4 !important;
           }
         `;
@@ -3308,9 +3366,28 @@
       }
     }
 
-    // Keep fullscreen icon dynamically updated
+    // Keep fullscreen icon dynamically updated and handle floating webcam panel overlays
     document.addEventListener('fullscreenchange', () => {
       const isFullscreen = !!document.fullscreenElement;
+      const fsPanel = document.getElementById('fullscreen-overlay-panel');
+      const sidebarContainer = document.querySelector('.webcam-grid-container');
+      const webcamGrid = document.getElementById('webcam-grid');
+      const callControls = document.getElementById('call-controls');
+      
+      if (isFullscreen) {
+        if (roomId && fsPanel) {
+          fsPanel.style.display = 'flex';
+          fsPanel.appendChild(webcamGrid);
+          fsPanel.appendChild(callControls);
+        }
+      } else {
+        if (fsPanel) fsPanel.style.display = 'none';
+        if (sidebarContainer) {
+          sidebarContainer.appendChild(webcamGrid);
+          sidebarContainer.appendChild(callControls);
+        }
+      }
+
       const fullscreenBtnEl = document.getElementById('fullscreen-btn');
       if (fullscreenBtnEl) {
         const iconName = isFullscreen ? 'minimize' : 'maximize';
@@ -3627,7 +3704,7 @@
       updatePlayBtn(true);
       resetControlsTimeout();
       
-      if (!ignoreSyncEvents && !video.srcObject) {
+      if (!ignoreSyncEvents && (!video.srcObject || allowVisitorControl)) {
         broadcastSync({
           type: 'play',
           time: video.currentTime
@@ -3641,7 +3718,7 @@
       document.body.style.cursor = 'default';
       if (controlsTimeout) clearTimeout(controlsTimeout);
       
-      if (!ignoreSyncEvents && !video.srcObject) {
+      if (!ignoreSyncEvents && (!video.srcObject || allowVisitorControl)) {
         broadcastSync({
           type: 'pause',
           time: video.currentTime
@@ -3650,7 +3727,7 @@
     });
 
     video.addEventListener('seeked', () => {
-      if (!ignoreSyncEvents && !video.srcObject) {
+      if (!ignoreSyncEvents && (!video.srcObject || allowVisitorControl)) {
         broadcastSync({
           type: 'seek',
           time: video.currentTime
@@ -3921,6 +3998,7 @@
       inviteLinkInput.value = inviteLink;
       createRoomBtn.style.display = 'none';
       activeSessionInfo.style.display = 'flex';
+      document.getElementById('host-settings-panel').style.display = 'flex';
       callControls.style.display = 'flex';
       toggleStreamBtn.style.display = 'flex';
       
@@ -3946,6 +4024,8 @@
       
       roomId = targetRoomId;
       isHost = false;
+      document.getElementById('host-settings-panel').style.display = 'none';
+      allowVisitorControl = false;
       
       updateConnectionStatus('connecting', 'Joining room...');
       
@@ -4046,6 +4126,9 @@
       
       createRoomBtn.style.display = 'block';
       activeSessionInfo.style.display = 'none';
+      document.getElementById('host-settings-panel').style.display = 'none';
+      document.getElementById('guest-control-toggle').checked = false;
+      allowVisitorControl = false;
       callControls.style.display = 'none';
       toggleStreamBtn.style.display = 'none';
       webcamGrid.innerHTML = '';
@@ -4078,7 +4161,8 @@
         currentTime: activePlayer.getCurrentTime(),
         playbackRate: activePlayer.getPlaybackRate(),
         isPlaying: activePlayer.isPlaying(),
-        isStreamingPlayback: isStreamingPlayback
+        isStreamingPlayback: isStreamingPlayback,
+        allowVisitorControl: allowVisitorControl
       });
     }
 
@@ -4116,8 +4200,19 @@
         case 'sync-state':
           applySyncState(data);
           break;
+
+        case 'control-permission':
+          allowVisitorControl = data.allowed;
+          appendSystemMessage(`Host has ${allowVisitorControl ? 'allowed' : 'restricted'} guests to control player synchronization.`);
+          showHUD('info', allowVisitorControl ? 'Guest Control On' : 'Guest Control Off');
+          break;
           
-        case 'play':
+        case 'play': {
+          const isSenderHost = (peerId === roomId);
+          if (!isSenderHost && !allowVisitorControl) {
+            console.log("Ignored play event from guest due to permission settings.");
+            break;
+          }
           ignoreSyncEvents = true;
           if (video.srcObject) {
             remoteStreamTime = data.time;
@@ -4133,9 +4228,19 @@
           }
           showHUD('play', 'Play synced');
           setTimeout(() => ignoreSyncEvents = false, 300);
-          break;
           
-        case 'pause':
+          if (isHost) {
+            broadcastSync({ type: 'play', time: data.time });
+          }
+          break;
+        }
+          
+        case 'pause': {
+          const isSenderHost = (peerId === roomId);
+          if (!isSenderHost && !allowVisitorControl) {
+            console.log("Ignored pause event from guest due to permission settings.");
+            break;
+          }
           ignoreSyncEvents = true;
           if (video.srcObject) {
             remoteStreamTime = data.time;
@@ -4151,9 +4256,19 @@
           }
           showHUD('pause', 'Pause synced');
           setTimeout(() => ignoreSyncEvents = false, 300);
-          break;
           
-        case 'seek':
+          if (isHost) {
+            broadcastSync({ type: 'pause', time: data.time });
+          }
+          break;
+        }
+          
+        case 'seek': {
+          const isSenderHost = (peerId === roomId);
+          if (!isSenderHost && !allowVisitorControl) {
+            console.log("Ignored seek event from guest due to permission settings.");
+            break;
+          }
           ignoreSyncEvents = true;
           if (video.srcObject) {
             remoteStreamTime = data.time;
@@ -4166,7 +4281,12 @@
           }
           showHUD('chevrons-right', 'Seek synced');
           setTimeout(() => ignoreSyncEvents = false, 300);
+          
+          if (isHost) {
+            broadcastSync({ type: 'seek', time: data.time });
+          }
           break;
+        }
           
         case 'speed':
           ignoreSyncEvents = true;
@@ -4243,6 +4363,9 @@
     }
 
     function applySyncState(data) {
+      if (data.allowVisitorControl !== undefined) {
+        allowVisitorControl = data.allowVisitorControl;
+      }
       if (data.youtubeVideoId) {
         loadYoutubeVideo(data.youtubeVideoId);
       } else {
@@ -4845,6 +4968,16 @@
     }
 
     // SESSION UI HANDLERS
+    const guestControlToggle = document.getElementById('guest-control-toggle');
+    guestControlToggle.addEventListener('change', () => {
+      allowVisitorControl = guestControlToggle.checked;
+      broadcastSync({
+        type: 'control-permission',
+        allowed: allowVisitorControl
+      });
+      appendSystemMessage(`You ${allowVisitorControl ? 'allowed' : 'restricted'} guests to control player synchronization.`);
+    });
+
     createRoomBtn.addEventListener('click', createRoom);
     copyInviteBtn.addEventListener('click', () => {
       inviteLinkInput.select();

@@ -1357,68 +1357,176 @@
     }
 
     /* Mobile responsiveness styles */
+    #sidebar-backdrop {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 24;
+      opacity: 0;
+      transition: opacity 0.25s ease;
+    }
+
+    .sidebar-close-btn {
+      display: none;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      width: 28px;
+      height: 28px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all 0.2s;
+      padding: 0;
+    }
+    .sidebar-close-btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: white;
+    }
+    .sidebar-close-btn i {
+      width: 16px;
+      height: 16px;
+    }
+
+    #room-details-panel[open] #details-chevron {
+      transform: rotate(180deg);
+    }
+
     @media (max-width: 768px) {
+      .sidebar-close-btn {
+        display: flex;
+      }
       #sidebar {
+        width: 280px !important;
         position: absolute !important;
         left: 0;
         top: 0;
         height: 100%;
+        z-index: 25 !important;
         box-shadow: 5px 0 25px rgba(0, 0, 0, 0.5);
       }
       #right-sidebar {
+        width: 280px !important;
         position: absolute !important;
         right: 0;
         top: 0;
         height: 100%;
+        z-index: 25 !important;
         box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5);
       }
       #sidebar.collapsed {
-        transform: translateX(-340px) !important;
+        transform: translateX(-280px) !important;
       }
       #right-sidebar.collapsed {
-        transform: translateX(340px) !important;
+        transform: translateX(280px) !important;
+      }
+      .right-sidebar-header {
+        padding: 12px 16px !important;
+        gap: 8px !important;
+      }
+      #session-controls {
+        gap: 6px !important;
+      }
+      #active-session-info {
+        gap: 6px !important;
+      }
+      #host-settings-panel {
+        padding: 6px 8px !important;
+        margin-top: 2px !important;
+      }
+      .chat-container {
+        min-height: 150px;
       }
       #controls-overlay {
-        padding: 20px 12px 10px 12px !important;
+        padding: 12px 10px 8px 10px !important;
         gap: 6px !important;
       }
       .timeline-container {
-        height: 10px !important;
+        height: 24px !important; /* Larger touch target area */
+      }
+      .timeline-track {
+        height: 3px !important; /* Elegant thin visual line */
+      }
+      .timeline-thumb {
+        transform: translate(-50%, -50%) scale(1.2) !important; /* Persistent visible thumb for touch drag */
+        width: 12px;
+        height: 12px;
       }
       .control-btn {
-        width: 32px !important;
-        height: 32px !important;
+        width: 30px !important;
+        height: 30px !important;
       }
       .control-btn-play {
-        width: 36px !important;
-        height: 36px !important;
+        width: 34px !important;
+        height: 34px !important;
       }
       .time-display {
-        font-size: 11px !important;
+        font-size: 10px !important;
       }
       .controls-row {
-        flex-wrap: wrap;
-        justify-content: center;
-        gap: 8px;
+        flex-wrap: nowrap !important;
+        justify-content: space-between;
+        gap: 6px;
       }
       .controls-group {
-        gap: 8px;
-        flex-wrap: wrap;
-        justify-content: center;
+        gap: 4px !important;
+        flex-wrap: nowrap !important;
+      }
+      .volume-slider {
+        display: none !important; /* Hide volume slider on mobile, use physical buttons */
+      }
+      .volume-container:hover {
+        background: transparent !important;
+        gap: 0 !important;
+        padding-right: 0 !important;
+      }
+      .menu-dropdown {
+        right: 0 !important;
+        transform: none !important; /* Slide menu left to prevent clipping off right screen edge */
       }
       .shortcuts-guide {
         display: none !important;
       }
       .empty-state-title {
-        font-size: 22px;
+        font-size: 20px;
       }
       .empty-state-desc {
-        font-size: 12px;
-        padding: 0 16px;
+        font-size: 11px;
+        padding: 0 12px;
       }
       .drop-zone {
-        padding: 20px;
-        max-width: 90%;
+        padding: 16px;
+        max-width: 95%;
+      }
+      .webcam-grid-container {
+        max-height: 25% !important;
+      }
+      #webcam-grid {
+        grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)) !important;
+        padding: 0 8px !important;
+        gap: 6px !important;
+      }
+      .webcam-card .peer-name {
+        font-size: 8px !important;
+        padding: 1px 4px !important;
+      }
+    }
+
+    @media (max-width: 480px) {
+      /* Hide Meet button and prev/next playlist buttons on mobile to save space */
+      #meet-btn, #prev-btn, #next-btn {
+        display: none !important;
+      }
+      .controls-group {
+        gap: 4px !important;
+      }
+      .control-btn {
+        width: 26px !important;
+        height: 26px !important;
       }
     }
   </style>
@@ -1433,11 +1541,17 @@
     <!-- Sidebar: Playlist and Folder Loader -->
     <div id="sidebar">
       <div class="sidebar-header">
-        <div class="logo-container">
-          <div class="logo-icon">
-            <i data-lucide="zap" style="color: white; width: 16px; height: 16px;"></i>
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div class="logo-container">
+            <div class="logo-icon">
+              <i data-lucide="zap" style="color: white; width: 16px; height: 16px;"></i>
+            </div>
+            <span class="logo-title">Antigravity Player</span>
           </div>
-          <span class="logo-title">Antigravity Player</span>
+          <!-- Close button for mobile -->
+          <button class="sidebar-close-btn" id="sidebar-close-btn" title="Close Sidebar">
+            <i data-lucide="x"></i>
+          </button>
         </div>
         
         <!-- Folder Selection Button Card -->
@@ -1476,6 +1590,8 @@
 
     <!-- Main Content Area -->
     <div id="main-content">
+      <!-- Sidebar mobile backdrop overlay -->
+      <div id="sidebar-backdrop"></div>
       
       <!-- Collapsible Sidebar Trigger button (Left) -->
       <button id="sidebar-toggle">
@@ -1571,6 +1687,11 @@
         <!-- Floating overlay webcam panel for fullscreen mode -->
         <div id="fullscreen-overlay-panel" style="display: none; position: absolute; right: 16px; top: 16px; bottom: 80px; width: 140px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 12px; z-index: 22; flex-direction: column; gap: 12px; overflow-y: auto;">
           <div style="font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); text-align: center; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 6px;">Call</div>
+        </div>
+
+        <!-- Custom Subtitle Overlay -->
+        <div id="subtitle-overlay" style="position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); width: 80%; text-align: center; pointer-events: none; z-index: 18; display: none; transition: bottom 0.2s ease;">
+          <span id="subtitle-text" style="background: rgba(0,0,0,0.75); color: #fff; padding: 6px 16px; border-radius: 6px; font-size: 20px; font-weight: 500; line-height: 1.4; text-shadow: 0 1px 3px rgba(0,0,0,0.8); font-family: var(--font-family); box-decoration-break: clone; -webkit-box-decoration-break: clone; display: inline-block;"></span>
         </div>
 
         <!-- HTML5 Video Element -->
@@ -1733,9 +1854,15 @@
     <!-- Right Sidebar: Webcams, Sync Controls, and Chat -->
     <div id="right-sidebar" class="collapsed">
       <div class="right-sidebar-header">
-        <div class="sidebar-title">
-          <i data-lucide="radio" style="color: #8b5cf6; width: 20px; height: 20px;"></i>
-          <span>Antigravity Sync</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div class="sidebar-title">
+            <i data-lucide="radio" style="color: #8b5cf6; width: 20px; height: 20px;"></i>
+            <span>Antigravity Sync</span>
+          </div>
+          <!-- Close button for mobile -->
+          <button class="sidebar-close-btn" id="right-sidebar-close-btn" title="Close Settings">
+            <i data-lucide="x"></i>
+          </button>
         </div>
         <div class="connection-status-panel">
           <span class="status-indicator offline" id="connection-dot"></span>
@@ -1749,25 +1876,37 @@
           </button>
           
           <div id="active-session-info" style="display: none; flex-direction: column; gap: 8px; width: 100%;">
-            <div style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Invite Link:</div>
-            <div style="display: flex; gap: 6px; width: 100%;">
-              <input type="text" id="invite-link-input" class="search-input" style="padding: 8px 12px; font-size: 12px; margin: 0; flex: 1; border-radius: 6px;" readonly>
-              <button class="btn-primary" id="copy-invite-btn" title="Copy Invite Link" style="padding: 8px 12px; border-radius: 6px; box-shadow: none;">
-                <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
-              </button>
-            </div>
+            <details id="room-details-panel" style="width: 100%; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; background: rgba(255,255,255,0.01);" open>
+              <summary style="font-size: 11px; font-weight: 600; padding: 8px 12px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; list-style: none;">
+                <span style="display: flex; align-items: center; gap: 6px;">
+                  <i data-lucide="settings" style="width: 12px; height: 12px;"></i>
+                  Room Info & Settings
+                </span>
+                <i data-lucide="chevron-down" id="details-chevron" style="width: 12px; height: 12px; transition: transform 0.2s;"></i>
+              </summary>
+              <div style="padding: 10px 12px; border-top: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; gap: 8px;">
+                <div style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Invite Link:</div>
+                <div style="display: flex; gap: 6px; width: 100%;">
+                  <input type="text" id="invite-link-input" style="background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.08); padding: 8px 12px; font-size: 12px; margin: 0; flex: 1; border-radius: 6px; color: white; outline: none; font-family: var(--font-family);" readonly>
+                  <button class="btn-primary" id="copy-invite-btn" title="Copy Invite Link" style="padding: 8px 12px; border-radius: 6px; box-shadow: none;">
+                    <i data-lucide="copy" style="width: 14px; height: 14px;"></i>
+                  </button>
+                </div>
+                
+                <!-- Host Playback Control Permission Toggle -->
+                <div id="host-settings-panel" style="display: none; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; margin-top: 4px; width: 100%;">
+                  <span style="font-size: 12px; font-weight: 500; color: #a78bfa; display: flex; align-items: center; gap: 6px;">
+                    <i data-lucide="shield" style="width: 12px; height: 12px;"></i>
+                    Allow Guest Control
+                  </span>
+                  <label class="switch-container" style="position: relative; display: inline-block; width: 34px; height: 20px;">
+                    <input type="checkbox" id="guest-control-toggle" style="opacity: 0; width: 0; height: 0;">
+                    <span class="switch-slider" style="position: absolute; cursor: pointer; inset: 0; background-color: rgba(255,255,255,0.15); border-radius: 20px; transition: .3s;"></span>
+                  </label>
+                </div>
+              </div>
+            </details>
             
-            <!-- Host Playback Control Permission Toggle -->
-            <div id="host-settings-panel" style="display: none; align-items: center; justify-content: space-between; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; margin-top: 4px; width: 100%;">
-              <span style="font-size: 12px; font-weight: 500; color: #a78bfa; display: flex; align-items: center; gap: 6px;">
-                <i data-lucide="settings" style="width: 12px; height: 12px;"></i>
-                Allow Guest Control
-              </span>
-              <label class="switch-container" style="position: relative; display: inline-block; width: 34px; height: 20px;">
-                <input type="checkbox" id="guest-control-toggle" style="opacity: 0; width: 0; height: 0;">
-                <span class="switch-slider" style="position: absolute; cursor: pointer; inset: 0; background-color: rgba(255,255,255,0.15); border-radius: 20px; transition: .3s;"></span>
-              </label>
-            </div>
             <button id="leave-room-btn" style="width: 100%; justify-content: center; padding: 8px 12px; font-size: 12px; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.25); color: #f87171; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-family: var(--font-family); font-weight: 600; transition: all 0.2s ease;">
               <i data-lucide="log-out" style="width: 14px; height: 14px;"></i>
               Leave Room
@@ -1876,6 +2015,8 @@
     let activePeersList = [];         // List of peers in room
     let remoteStreamAttached = false;
     let allowVisitorControl = false;  // Control permission setting
+    let activeStreamedCues = [];      // Cues array for custom rendering
+    let currentPlaybackRate = 1.0;    // Global room playback speed tracking
 
     // Live stream co-watch time sync variables
     let remoteStreamTime = 0;
@@ -1892,6 +2033,23 @@
       // 1. Update font size (scale to 75% on mobile to fit the viewport)
       const isMobile = window.innerWidth <= 768;
       const size = isMobile ? Math.max(12, Math.round(subtitleSize * 0.75)) : subtitleSize;
+      
+      // 2. Update custom subtitle overlay styles
+      const subTextEl = document.getElementById('subtitle-text');
+      const subOverlay = document.getElementById('subtitle-overlay');
+      const playerContainer = document.getElementById('player-container');
+      
+      if (subTextEl && subOverlay && playerContainer) {
+        subTextEl.style.fontSize = `${size}px`;
+        const bottomOffset = 100 - subtitlePosition;
+        
+        // Push subtitles higher if controls are visible (adjusting offset in pixels for screen scale)
+        const showControls = playerContainer.classList.contains('show-controls');
+        const offsetPx = showControls ? (isMobile ? 65 : 85) : 10;
+        subOverlay.style.bottom = `calc(${bottomOffset}% + ${offsetPx}px)`;
+      }
+
+      // 3. Fallback native cue styling
       const cueStyle = document.getElementById('custom-cue-style');
       if (cueStyle) {
         cueStyle.innerHTML = `
@@ -1902,16 +2060,60 @@
         `;
       }
       
-      // 2. Reposition loaded cues
+      // 4. Reposition native cues
       for (let i = 0; i < video.textTracks.length; i++) {
         const track = video.textTracks[i];
         if (track.cues) {
-          for (let j = 0; j < track.cues.length; j++) {
+          for (let j = track.cues.length - 1; j >= 0; j--) {
             const cue = track.cues[j];
-            cue.snapToLines = false;
-            cue.line = subtitlePosition;
+            if (cue) {
+              cue.snapToLines = false;
+              cue.line = subtitlePosition;
+            }
           }
         }
+      }
+    }
+
+    function updateSubtitles() {
+      const subOverlay = document.getElementById('subtitle-overlay');
+      const subTextEl = document.getElementById('subtitle-text');
+      if (!subOverlay || !subTextEl) return;
+      
+      if (currentSubtitleTrackId === 'off') {
+        subTextEl.innerHTML = '';
+        subOverlay.style.display = 'none';
+        return;
+      }
+      
+      let curTime = video.srcObject ? remoteStreamTime : video.currentTime;
+      let activeCueText = "";
+      
+      if (video.srcObject && currentSubtitleTrackId === 'streamed-track') {
+        // Visitor reads from streamed cues array
+        const activeCue = activeStreamedCues.find(c => curTime >= c.startTime && curTime <= c.endTime);
+        if (activeCue) {
+          activeCueText = activeCue.text;
+        }
+      } else {
+        // Reads from selected active track (local or embedded subtitle track)
+        const activeTrackObj = currentTracks.find(t => t.id === currentSubtitleTrackId);
+        if (activeTrackObj && activeTrackObj.trackObj && activeTrackObj.trackObj.cues) {
+          const cues = activeTrackObj.trackObj.cues;
+          for (let i = 0; i < cues.length; i++) {
+            if (curTime >= cues[i].startTime && curTime <= cues[i].endTime) {
+              activeCueText = cues[i].text;
+              break;
+            }
+          }
+        }
+      }
+      
+      if (activeCueText) {
+        subTextEl.innerHTML = activeCueText.replace(/\n/g, '<br>');
+        subOverlay.style.display = 'block';
+      } else {
+        subOverlay.style.display = 'none';
       }
     }
 
@@ -2021,9 +2223,17 @@
     sidebarToggle.addEventListener('click', () => {
       sidebar.classList.toggle('collapsed');
       const isCollapsed = sidebar.classList.contains('collapsed');
+      
+      // Mutual sidebar collapsing on mobile
+      if (!isCollapsed && window.innerWidth <= 768) {
+        rightSidebar.classList.add('collapsed');
+        updateRightSidebarToggleIcon();
+      }
+      
       const iconName = isCollapsed ? 'chevron-right' : 'menu';
       sidebarToggle.innerHTML = `<i data-lucide="${iconName}" id="toggle-icon"></i>`;
       lucide.createIcons({ container: sidebarToggle });
+      updateBackdrop();
     });
 
     // EVENT LISTENERS: FOLDER LOADING
@@ -2315,6 +2525,9 @@
       selectedExternalAudio = null;
       selectedExternalSub = null;
       currentSubtitleTrackId = 'off';
+      activeStreamedCues = [];
+      const subOverlay = document.getElementById('subtitle-overlay');
+      if (subOverlay) subOverlay.style.display = 'none';
       
       // Hide Resume Toast
       resumeToast.classList.remove('show');
@@ -2864,12 +3077,13 @@
       if (video.srcObject) {
         // Client mode: calculate interpolated playback time from stream connection time
         if (remoteStreamIsPlaying) {
-          remoteStreamTime = lastStreamTimeUpdateVal + (video.currentTime - lastStreamTimeUpdateLocalTime);
+          remoteStreamTime = lastStreamTimeUpdateVal + (video.currentTime - lastStreamTimeUpdateLocalTime) * currentPlaybackRate;
         } else {
           remoteStreamTime = lastStreamTimeUpdateVal;
         }
         updateTimeDisplay();
         updateProgressBar();
+        updateSubtitles(); // Update custom subtitles for visitors
         return;
       }
 
@@ -2877,6 +3091,7 @@
         updateTimeDisplay();
         updateProgressBar();
       }
+      updateSubtitles(); // Update custom subtitles for host
       
       // Host broadcasts stream time updates to peers
       if (isHost && isStreamingPlayback && roomId) {
@@ -3671,6 +3886,7 @@
     
     function resetControlsTimeout() {
       container.classList.add('show-controls');
+      applySubtitleSettings(); // Update subtitle position for controls height
       document.body.style.cursor = 'default';
       
       if (controlsTimeout) clearTimeout(controlsTimeout);
@@ -3678,6 +3894,7 @@
       if (!video.paused) {
         controlsTimeout = setTimeout(() => {
           container.classList.remove('show-controls');
+          applySubtitleSettings(); // Restore subtitle position
           document.body.style.cursor = 'none';
           closeAllMenusExcept(null);
         }, 3000);
@@ -4077,6 +4294,7 @@
         if (isHost) {
           appendSystemMessage(`Peer connected: ${peerId.substring(0, 5)}`);
           sendSyncStateToPeer(conn);
+          sendSubtitleCuesToPeer(conn);
           broadcastPeerList();
           
           // If we are currently streaming the playback, immediately start a stream call to this peer
@@ -4291,6 +4509,7 @@
           
         case 'speed':
           ignoreSyncEvents = true;
+          currentPlaybackRate = data.rate;
           activePlayer.setPlaybackRate(data.rate);
           showHUD('gauge', `Speed: ${data.rate}x`);
           setTimeout(() => ignoreSyncEvents = false, 300);
@@ -4366,6 +4585,9 @@
     function applySyncState(data) {
       if (data.allowVisitorControl !== undefined) {
         allowVisitorControl = data.allowVisitorControl;
+      }
+      if (data.playbackRate !== undefined) {
+        currentPlaybackRate = data.playbackRate;
       }
       if (data.youtubeVideoId) {
         loadYoutubeVideo(data.youtubeVideoId);
@@ -4859,8 +5081,46 @@
       }
     }
 
+    function sendSubtitleCuesToPeer(conn) {
+      if (!isHost || !isStreamingPlayback || currentSubtitleTrackId === 'off') return;
+      const activeTrackObj = currentTracks.find(t => t.id === currentSubtitleTrackId);
+      if (activeTrackObj && activeTrackObj.trackObj && activeTrackObj.trackObj.cues) {
+        const cuesArray = [];
+        const cues = activeTrackObj.trackObj.cues;
+        for (let i = 0; i < cues.length; i++) {
+          cuesArray.push({
+            startTime: cues[i].startTime,
+            endTime: cues[i].endTime,
+            text: cues[i].text
+          });
+        }
+        conn.send({
+          type: 'subtitle-cues',
+          cues: cuesArray,
+          label: activeTrackObj.label
+        });
+      }
+    }
+
     function applyStreamedCues(cues, label) {
+      // Store cues in local array for custom overlay rendering
+      activeStreamedCues = cues;
+      
       let track = null;
+      // Remove any previously created streamed tracks from currentTracks
+      currentTracks = currentTracks.filter(t => {
+        if (t.id === 'streamed-track') {
+          t.trackObj.mode = 'disabled';
+          if (t.trackObj.cues) {
+            for (let j = t.trackObj.cues.length - 1; j >= 0; j--) {
+              try { t.trackObj.removeCue(t.trackObj.cues[j]); } catch(e){}
+            }
+          }
+          return false;
+        }
+        return true;
+      });
+
       for (let i = 0; i < video.textTracks.length; i++) {
         const t = video.textTracks[i];
         if (t.label === "Streamed Subtitles" || t.label.startsWith("Streamed: ") || t.language === "streamed-lang") {
@@ -4878,6 +5138,8 @@
       
       if (label === 'off') {
         currentSubtitleTrackId = 'off';
+        updateSubtitles();
+        populateSubtitleMenu();
         return;
       }
       
@@ -4894,7 +5156,19 @@
           track.addCue(cue);
         }
       });
+
+      // Add to currentTracks so it's selectable in the menu
+      currentTracks.push({
+        id: 'streamed-track',
+        label: `Host Synced: ${label}`,
+        trackObj: track
+      });
+      
+      currentSubtitleTrackId = 'streamed-track';
+      
       applySubtitleSettings();
+      updateSubtitles();
+      populateSubtitleMenu();
     }
 
     // CHAT PANEL LOGIC
@@ -4958,7 +5232,17 @@
 
     function toggleRightSidebar() {
       rightSidebar.classList.toggle('collapsed');
+      const isCollapsed = rightSidebar.classList.contains('collapsed');
+      
+      // Mutual sidebar collapsing on mobile
+      if (!isCollapsed && window.innerWidth <= 768) {
+        sidebar.classList.add('collapsed');
+        sidebarToggle.innerHTML = `<i data-lucide="menu" id="toggle-icon"></i>`;
+        lucide.createIcons({ container: sidebarToggle });
+      }
+      
       updateRightSidebarToggleIcon();
+      updateBackdrop();
     }
 
     function updateRightSidebarToggleIcon() {
@@ -4966,6 +5250,64 @@
       const iconName = isCollapsed ? 'radio' : 'chevron-right';
       rightSidebarToggle.innerHTML = `<i data-lucide="${iconName}" id="right-toggle-icon"></i>`;
       lucide.createIcons({ container: rightSidebarToggle });
+    }
+
+    // Mobile close button click listeners
+    const sidebarCloseBtn = document.getElementById('sidebar-close-btn');
+    if (sidebarCloseBtn) {
+      sidebarCloseBtn.addEventListener('click', () => {
+        sidebar.classList.add('collapsed');
+        sidebarToggle.innerHTML = `<i data-lucide="menu" id="toggle-icon"></i>`;
+        lucide.createIcons({ container: sidebarToggle });
+        updateBackdrop();
+      });
+    }
+
+    const rightSidebarCloseBtn = document.getElementById('right-sidebar-close-btn');
+    if (rightSidebarCloseBtn) {
+      rightSidebarCloseBtn.addEventListener('click', () => {
+        rightSidebar.classList.add('collapsed');
+        updateRightSidebarToggleIcon();
+        updateBackdrop();
+      });
+    }
+
+    // Sidebar mobile backdrop click listener
+    const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+    if (sidebarBackdrop) {
+      sidebarBackdrop.addEventListener('click', () => {
+        sidebar.classList.add('collapsed');
+        rightSidebar.classList.add('collapsed');
+        
+        sidebarToggle.innerHTML = `<i data-lucide="menu" id="toggle-icon"></i>`;
+        lucide.createIcons({ container: sidebarToggle });
+        
+        updateRightSidebarToggleIcon();
+        updateBackdrop();
+      });
+    }
+
+    function updateBackdrop() {
+      const backdrop = document.getElementById('sidebar-backdrop');
+      if (!backdrop) return;
+      
+      const isLeftOpen = !sidebar.classList.contains('collapsed');
+      const isRightOpen = !rightSidebar.classList.contains('collapsed');
+      const isMobile = window.innerWidth <= 768;
+      
+      if (isMobile && (isLeftOpen || isRightOpen)) {
+        backdrop.style.display = 'block';
+        // Force reflow
+        backdrop.offsetHeight;
+        backdrop.style.opacity = '1';
+      } else {
+        backdrop.style.opacity = '0';
+        setTimeout(() => {
+          if (backdrop.style.opacity === '0') {
+            backdrop.style.display = 'none';
+          }
+        }, 250);
+      }
     }
 
     // SESSION UI HANDLERS
@@ -5016,6 +5358,14 @@
 
     // INITIALIZE PEER
     initPeer();
+
+    // Collapse details panel on mobile by default
+    if (window.innerWidth <= 768) {
+      const detailsPanel = document.getElementById('room-details-panel');
+      if (detailsPanel) {
+        detailsPanel.removeAttribute('open');
+      }
+    }
 
   </script>
 </body>

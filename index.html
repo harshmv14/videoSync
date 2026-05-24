@@ -3808,6 +3808,17 @@
       const peerId = conn.peer;
       peerConnections[peerId] = conn;
       
+      // Log ICE state events for data channel debugging
+      setTimeout(() => {
+        if (conn.peerConnection) {
+          conn.peerConnection.addEventListener('iceconnectionstatechange', () => {
+            const state = conn.peerConnection.iceConnectionState;
+            console.log(`[ICE] Chat connection with ${peerId}:`, state);
+            appendSystemMessage(`[ICE Chat] State with ${getUserNickname(peerId)}: ${state}`);
+          });
+        }
+      }, 500);
+      
       if (!userColors[peerId]) {
         userColors[peerId] = getRandomColor();
       }
@@ -4106,7 +4117,23 @@
         console.log("Receiving host video stream...");
         remotePlaybackCall = call;
         call.answer();
+        
+        // Log ICE connection events for incoming video stream debugging
+        setTimeout(() => {
+          if (call.peerConnection) {
+            call.peerConnection.addEventListener('iceconnectionstatechange', () => {
+              const state = call.peerConnection.iceConnectionState;
+              console.log(`[ICE] Playback stream connection state:`, state);
+              appendSystemMessage(`[ICE Playback] State: ${state}`);
+            });
+          }
+        }, 500);
+
         call.on('stream', (stream) => {
+          const videoTracks = stream.getVideoTracks();
+          const audioTracks = stream.getAudioTracks();
+          appendSystemMessage(`[Stream Info] Received stream: ${videoTracks.length} video, ${audioTracks.length} audio tracks.`);
+          
           video.srcObject = stream;
           setRemoteStreamMode(true);
           
@@ -4129,6 +4156,17 @@
     }
 
     function setupMediaCall(call, peerId) {
+      // Log ICE state events for webcam calls debugging
+      setTimeout(() => {
+        if (call.peerConnection) {
+          call.peerConnection.addEventListener('iceconnectionstatechange', () => {
+            const state = call.peerConnection.iceConnectionState;
+            console.log(`[ICE] Webcam call with ${peerId}:`, state);
+            appendSystemMessage(`[ICE Webcam] State: ${state}`);
+          });
+        }
+      }, 500);
+
       call.on('stream', (remoteStream) => {
         addWebcamFeed(peerId, remoteStream);
       });
@@ -4253,11 +4291,26 @@
             hostPlaybackStream = stream;
           }
 
+          const videoTracks = hostPlaybackStream.getVideoTracks();
+          const audioTracks = hostPlaybackStream.getAudioTracks();
+          appendSystemMessage(`[Stream Info] Captured stream: ${videoTracks.length} video, ${audioTracks.length} audio tracks.`);
+
           Object.keys(peerConnections).forEach(peerId => {
             const call = peer.call(peerId, hostPlaybackStream, {
               metadata: { type: 'video-stream' }
             });
             playbackCalls[peerId] = call;
+            
+            // Log ICE connection events for host stream sending
+            setTimeout(() => {
+              if (call.peerConnection) {
+                call.peerConnection.addEventListener('iceconnectionstatechange', () => {
+                  const state = call.peerConnection.iceConnectionState;
+                  console.log(`[ICE] Stream playback to ${peerId} state:`, state);
+                  appendSystemMessage(`[ICE Send Stream] State to ${getUserNickname(peerId)}: ${state}`);
+                });
+              }
+            }, 500);
           });
           
           broadcastSync({

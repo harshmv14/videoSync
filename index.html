@@ -2753,8 +2753,10 @@
     });
 
     function seekTimeline(e) {
+      if (video.srcObject) return; // Disable seeking for remote stream receivers
       const duration = activePlayer.getDuration();
-      if (!duration) return;
+      if (!duration || !isFinite(duration) || isNaN(duration)) return;
+      
       const rect = timelineContainer.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       const time = ratio * duration;
@@ -2773,8 +2775,10 @@
     }
 
     function showSeekTooltip(e) {
+      if (video.srcObject) return; // Disable timeline tooltips for remote stream receivers
       const duration = activePlayer.getDuration();
-      if (!duration) return;
+      if (!duration || !isFinite(duration) || isNaN(duration)) return;
+      
       const rect = timelineContainer.getBoundingClientRect();
       const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       const seekTime = ratio * duration;
@@ -3609,6 +3613,7 @@
         }
       },
       seek: function(time) {
+        if (video.srcObject) return; // Ignore seeks when receiving a remote WebRTC stream
         if (isYouTubeMode) {
           if (ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(time, true);
         } else {
@@ -4104,6 +4109,13 @@
         call.on('stream', (stream) => {
           video.srcObject = stream;
           setRemoteStreamMode(true);
+          
+          // Play the live stream and handle autoplay browser blockages
+          video.play().catch(err => {
+            console.warn("Live stream autoplay blocked:", err);
+            showHUD('volume-x', 'Click to play');
+            appendSystemMessage("Live stream connected! Click anywhere on the player area to activate video/audio.");
+          });
         });
         call.on('close', () => {
           setRemoteStreamMode(false);

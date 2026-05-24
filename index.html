@@ -1781,6 +1781,7 @@
     let lastStreamTimeUpdateVal = 0;
     let hostAudioContext = null;
     let hostAudioSourceNode = null;
+    let playbackCanvasInterval = null;
 
     function applySubtitleSettings() {
       // 1. Update font size
@@ -2158,6 +2159,12 @@
       if (syncInterval) {
         clearInterval(syncInterval);
         syncInterval = null;
+      }
+      
+      // Cleanup canvas interval
+      if (playbackCanvasInterval) {
+        clearInterval(playbackCanvasInterval);
+        playbackCanvasInterval = null;
       }
       
       // Cleanup host Audio loopback
@@ -4468,22 +4475,69 @@
             return;
           }
           
-          if (isExternalAudioActive) {
-            let combined = new MediaStream();
-            stream.getVideoTracks().forEach(t => combined.addTrack(t));
-            let audioStream = audio.captureStream ? audio.captureStream() : audio.mozCaptureStream();
-            audioStream.getAudioTracks().forEach(t => combined.addTrack(t));
-            hostPlaybackStream = combined;
-          } else {
-            hostPlaybackStream = stream;
+          // Capture video track via Canvas drawing loop to bypass GPU acceleration black screens
+          let canvas = document.getElementById('playback-stream-canvas');
+          if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.id = 'playback-stream-canvas';
+            canvas.style.display = 'none';
+            document.body.appendChild(canvas);
+          }
+          
+          const ctx = canvas.getContext('2d');
+          canvas.width = video.videoWidth || 640;
+          canvas.height = video.videoHeight || 360;
+          
+          if (playbackCanvasInterval) clearInterval(playbackCanvasInterval);
+          playbackCanvasInterval = setInterval(() => {
+            if (!isStreamingPlayback) {
+              if (playbackCanvasInterval) {
+                clearInterval(playbackCanvasInterval);
+                playbackCanvasInterval = null;
+              }
+              return;
+            }
+            if (video.readyState >= 2) {
+              if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 360;
+              }
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            }
+          }, 42); // Draw at approx 24 fps
+          
+          let canvasStream = canvas.captureStream(24);
+          let videoTrack = canvasStream.getVideoTracks()[0];
+          if (!videoTrack && stream) {
+            console.warn("Canvas captureStream returned no video tracks, falling back to direct video capture.");
+            videoTrack = stream.getVideoTracks()[0];
           }
 
-          const videoTracks = hostPlaybackStream.getVideoTracks();
-          const audioTracks = hostPlaybackStream.getAudioTracks();
-          appendSystemMessage(`[Stream Info] Captured stream: ${videoTracks.length} video, ${audioTracks.length} audio tracks.`);
+          let audioTracks = [];
+          if (stream) {
+            audioTracks = stream.getAudioTracks();
+          }
+          
+          if (isExternalAudioActive) {
+            try {
+              let audioStream = audio.captureStream ? audio.captureStream() : audio.mozCaptureStream();
+              audioTracks = audioStream.getAudioTracks();
+            } catch (e) {
+              console.warn("Could not capture external audio tracks:", e);
+            }
+          }
+
+          let combined = new MediaStream();
+          if (videoTrack) combined.addTrack(videoTrack);
+          audioTracks.forEach(t => combined.addTrack(t));
+          hostPlaybackStream = combined;
+
+          const videoTracksCount = hostPlaybackStream.getVideoTracks();
+          const audioTracksCount = hostPlaybackStream.getAudioTracks();
+          appendSystemMessage(`[Stream Info] Captured stream: ${videoTracksCount.length} video, ${audioTracksCount.length} audio tracks.`);
 
           // Web Audio API Loopback to prevent Chrome muting local speaker output
-          if (audioTracks.length > 0) {
+          if (audioTracksCount.length > 0) {
             try {
               if (!hostAudioContext) {
                 hostAudioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -4540,6 +4594,12 @@
         if (hostPlaybackStream) {
           hostPlaybackStream.getTracks().forEach(t => t.stop());
           hostPlaybackStream = null;
+        }
+        
+        // Clean up canvas interval
+        if (playbackCanvasInterval) {
+          clearInterval(playbackCanvasInterval);
+          playbackCanvasInterval = null;
         }
         
         // Clean up host Audio loopback

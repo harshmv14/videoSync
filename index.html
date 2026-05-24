@@ -2183,11 +2183,14 @@
       // Cleanup tracks
       disableAllSubtitleTracks();
       
-      // Revoke old URL
+      // Revoke old URL and reset srcObject
       if (video.src) {
         URL.revokeObjectURL(video.src);
       }
       video.src = '';
+      if (video.srcObject) {
+        video.srcObject = null;
+      }
       
       // Reset external audio
       isExternalAudioActive = false;
@@ -2691,7 +2694,7 @@
     }
 
     function togglePlay() {
-      if (!isYouTubeMode && video.src === "") return;
+      if (!isYouTubeMode && video.src === "" && !video.srcObject) return;
       if (activePlayer.isPlaying()) {
         activePlayer.pause();
         showHUD('pause', 'Pause');
@@ -3319,7 +3322,7 @@
     });
 
     function skip(secs) {
-      if (video.src === "") return;
+      if (video.src === "" && !video.srcObject) return;
       video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + secs));
       if (isExternalAudioActive) {
         audio.currentTime = video.currentTime;
@@ -3526,7 +3529,7 @@
     
     // Click anywhere on player to play/pause (excluding controls & overlays)
     container.addEventListener('click', (e) => {
-      if (!isYouTubeMode && video.src === "") return;
+      if (!isYouTubeMode && video.src === "" && !video.srcObject) return;
       const controlsOverlay = document.getElementById('controls-overlay');
       if (controlsOverlay.contains(e.target) || 
           e.target.closest('.menu-dropdown') ||
@@ -3923,6 +3926,7 @@
                 metadata: { type: 'video-stream' }
               });
               playbackCalls[peerId] = call;
+              applySenderSettings(call.peerConnection, true);
             }, 1000);
           }
         }
@@ -4188,6 +4192,47 @@
       }, 800);
     }
 
+    // WebRTC Sender bandwidth and resolution limits settings (essential for full-mesh performance)
+    function applySenderSettings(peerConnection, isVideoStream) {
+      if (!peerConnection) return;
+      setTimeout(() => {
+        try {
+          const senders = peerConnection.getSenders();
+          senders.forEach(sender => {
+            if (sender.track && sender.track.kind === 'video') {
+              const parameters = sender.getParameters();
+              if (!parameters.encodings) {
+                parameters.encodings = [{}];
+              }
+              parameters.encodings.forEach(encoding => {
+                if (isVideoStream) {
+                  // Video sharing: target 1.2 Mbps, limit to 24fps
+                  encoding.maxBitrate = 1200000;
+                  encoding.maxFramerate = 24;
+                  const settings = sender.track.getSettings();
+                  if (settings.width && settings.width > 1280) {
+                    encoding.scaleResolutionDownBy = 1.5; // Scale down 1080p -> 720p
+                  } else {
+                    encoding.scaleResolutionDownBy = 1.0;
+                  }
+                } else {
+                  // Webcam call: target 150 Kbps, limit to 15fps for mesh calling optimization
+                  encoding.maxBitrate = 150000;
+                  encoding.maxFramerate = 15;
+                  encoding.scaleResolutionDownBy = 1.0;
+                }
+              });
+              sender.setParameters(parameters)
+                .then(() => console.log(`Sender settings applied: isVideo=${isVideoStream}`))
+                .catch(err => console.warn("Could not apply WebRTC sender parameters:", err));
+            }
+          });
+        } catch (e) {
+          console.warn("Error applying WebRTC sender settings:", e);
+        }
+      }, 1000);
+    }
+
     // WEBCAM VIDEO CALL IMPLEMENTATION
     async function startLocalWebcamStream() {
       try {
@@ -4195,8 +4240,16 @@
           throw new Error("navigator.mediaDevices is undefined (blocked on non-secure file:// context)");
         }
         localWebcamStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
+          video: {
+            width: { ideal: 320, max: 480 },
+            height: { ideal: 240, max: 360 },
+            frameRate: { ideal: 15, max: 20 }
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
         });
         
         isCamOn = true;
@@ -4212,6 +4265,7 @@
             });
             peerCalls[peerId] = call;
             setupMediaCall(call, peerId);
+            applySenderSettings(call.peerConnection, false);
           }
         });
       } catch (err) {
@@ -4276,6 +4330,7 @@
         peerCalls[peerId] = call;
         call.answer(localWebcamStream);
         setupMediaCall(call, peerId);
+        applySenderSettings(call.peerConnection, false);
       }
     }
 
@@ -4405,8 +4460,8 @@
       if (isStreamingPlayback) {
         try {
           let stream = null;
-          if (video.captureStream) stream = video.captureStream();
-          else if (video.mozCaptureStream) stream = video.mozCaptureStream();
+          if (video.captureStream) stream = video.captureStream(24);
+          else if (video.mozCaptureStream) stream = video.mozCaptureStream(24);
           else {
             alert("This browser does not support captureStream.");
             isStreamingPlayback = false;
@@ -4452,6 +4507,7 @@
               metadata: { type: 'video-stream' }
             });
             playbackCalls[peerId] = call;
+            applySenderSettings(call.peerConnection, true);
             
             // Log ICE connection events for host stream sending
             setTimeout(() => {
